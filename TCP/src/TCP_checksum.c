@@ -6,7 +6,7 @@
  */
 
 
-TCP_checksumm(struct ip_pkt *ip_packet, unsigned len)
+TCP_checksum(struct ip_pkt *ip_packet, unsigned len)
 {
 	tcp_sgm		*tcp_segment = (tcp_sgm *)ip_packet->ip_data;
 	unsigned	short	*sptr;
