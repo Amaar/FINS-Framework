@@ -70,6 +70,11 @@ struct finsFrame SwitchSearch(struct finsFrame qRequest)
 
 }
 
+/**@brief This function receives a frame and then passes it to the target module
+ * @param rcvdFrame refers to the FINS frame
+ * @param ptrTable refers to the first element of records (this is needed in generating query reply etc.)
+ */
+
 struct finsFrame SwitchTask(struct finsFrame rcvdFrame, struct tableRecord *ptrTable)
 {
 	/* This function does not receive a finsFrame with opcode QUERYREPLY (e.g. 666) since this is the task of
