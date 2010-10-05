@@ -5,94 +5,29 @@
  */
 #include "finstypes.h"
 #include "arp.h"
-#include "test_arp.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
+#include "finsdebug.h"
+#include "metadata.h"
+
+#define DEBUG
+
+
+int INTERFACECOUNT= 1;
+uint64_t MACADDRESS = 890190479;/**<hard coded MAC address of host*/
+uint32_t IPADDRESS = 672121;/**<hard coded IP address of host*/
+
+struct node *ptr_neighbor_list;
+
+uint32_t IP_interface_set[1];
+uint64_t MAC_interface_set[1];
+uint64_t interface_MAC_addrs;/**<MAC address of current interface*/
+uint32_t interface_IP_addrs;/**<IP address of current interface*/
 
 int num_hosts;
 struct node *ptr_neighbor_list; /**<pointer the first element of a list of 'neighbors'*/
 FILE *ptr_file; /**<file pointer to the file which contains a list of neighbors*/
-
-/**@brief this function mimics ARP request from some neighbor within a network
- * @param IP_sender_addrs is the IP address of the neighbor which has sent a 'request'
- * @param MAC_sender_addrs is the MAC address of the neighbor
- */
-struct ARP_message mimic_net_request(uint32_t IP_sender_addrs, uint64_t MAC_sender_addrs)
-{
-	struct ARP_message request_ARP;
-	extern uint32_t interface_IP_addrs;
-
-	request_ARP.hardware_type = HWDTYPE;
-	request_ARP.protocol_type = PROTOCOLTYPE;
-	request_ARP.hardware_addrs_length= HDWADDRSLEN ;
-	request_ARP.protocol_addrs_length = PROTOCOLADDRSLEN;
-	request_ARP.operation = ARPREQUESTOP;
-	request_ARP.sender_MAC_addrs = MAC_sender_addrs;
-	request_ARP.sender_IP_addrs = IP_sender_addrs;
-	request_ARP.target_MAC_addrs = 0;
-	request_ARP.target_IP_addrs = interface_IP_addrs;
-
-	return request_ARP;
-}
-
-/**Based on which host matches the ARP request an appropriate reply through a FINS frame is
- * created
- * @brief this function mimics a network response for an ARP request pushed via a FINS frame.
- * The purpose is to test the functionality of the code for the ARP module
- * @param request_fins is FINS data frame which hosts within a network will receive
- * from the Switch
- */
-struct finsFrame mimic_net_reply(struct finsFrame request_fins)
-{
-	struct node *ptr_elementInList;
-	struct ARP_message request_ARP, reply_ARP, *temp_ARP;
-	struct finsFrame reply_fins;
-
-	ptr_elementInList = ptr_neighbor_list;
-
-	temp_ARP = (struct ARP_message*) request_fins.dataFrame.pdu;
-	request_ARP=*temp_ARP;
-
-	ptr_elementInList = ptr_neighbor_list;
-
-	request_ARP = fins_to_arp(request_fins);
-
-	print_msgARP(request_ARP);
-
-	/**Default entries*/
-	reply_ARP.sender_IP_addrs = NULLADDRESS;
-	reply_ARP.sender_MAC_addrs = NULLADDRESS;
-	reply_ARP.target_IP_addrs = NULLADDRESS;
-	reply_ARP.target_MAC_addrs = NULLADDRESS;
-	reply_ARP.operation = NULLADDRESS;
-
-	while (ptr_elementInList!=NULL )
-	{
-
-		if (ptr_elementInList->IP_addrs==request_ARP.target_IP_addrs)
-		{
-			reply_ARP.sender_IP_addrs = ptr_elementInList->IP_addrs;
-			reply_ARP.sender_MAC_addrs = ptr_elementInList->MAC_addrs;
-			reply_ARP.target_IP_addrs =request_ARP.sender_IP_addrs;
-			reply_ARP.target_MAC_addrs = request_ARP.sender_MAC_addrs;
-			reply_ARP.hardware_addrs_length = request_ARP.hardware_addrs_length;
-			reply_ARP.hardware_type = request_ARP.hardware_type;
-			reply_ARP.operation = ARPREPLYOP;
-			reply_ARP.protocol_addrs_length=request_ARP.protocol_addrs_length;
-			reply_ARP.protocol_type=request_ARP.protocol_type;
-
-		}
-
-		ptr_elementInList = ptr_elementInList->next;
-	}
-	temp_ARP=&reply_ARP;
-	print_msgARP(reply_ARP);
-
-	reply_fins =  arp_to_fins(&reply_ARP);
-
-	return reply_fins;
-}
 
 /**
  * @brief this function is used to read an IP address from a user
@@ -106,14 +41,12 @@ uint32_t read_IP_addrs()
 	char *a1, *a2, *a3, *a4; /**<temporary variables to store parsed IP octet strings*/
 	int test_int;
 
-	printf("Segmentation fault may result if address improperly entered\n"
-			"Enter IP address (e.g. 234.0.17.8) of target; (0.0.0.0) to exit function:\n");
-	fflush(stdout);
+	PRINT_DEBUG("Enter IP address (e.g. 234.0.17.8) of target; (0.0.0.0) to end:\n");
 	scanf("%s",IP_string);
 
 	test_int = atoi(IP_string);
 
-    a1 = strtok(IP_string, ".");
+	a1 = strtok(IP_string, ".");
 	b1 = atoi(a1);
 	a2 = strtok( NULL, "." );
 	b2 = atoi(a2);
@@ -122,13 +55,12 @@ uint32_t read_IP_addrs()
 	a4 = strtok( NULL, "." );
 	b4 = atoi(a4);
 
-
 	IP_target_addrs = gen_IP_addrs(b1,b2,b3,b4);
 
 	if (IP_target_addrs == 0)
-    	  IP_target_addrs = NULLADDRESS;
+		IP_target_addrs = NULLADDRESS;
 
-    return IP_target_addrs;
+	return IP_target_addrs;
 }
 
 /** @brief generates a binary file with artificially generated hosts (with random IP and
@@ -137,7 +69,7 @@ uint32_t read_IP_addrs()
  */
 void gen_neighbor_list(char *fileName)
 {
-//	int num_hosts; /**<number of neighbors to be generated*/
+	//	int num_hosts; /**<number of neighbors to be generated*/
 	int i; /**< This is a variable for iterating through number of records <recordsNum>*/
 
 	/**< The following variables are for storing octet values*/
@@ -147,11 +79,11 @@ void gen_neighbor_list(char *fileName)
 
 	ptr_file =fopen(fileName,"w");
 	if (!ptr_file)
-	{	printf("Unable to open file!");
-		exit (0);
+	{	PRINT_DEBUG("Unable to open file!");
+	exit (0);
 	}
 
-	printf("How many neighbors in a network to create?\n");
+	PRINT_DEBUG("How many neighbors in a network to create?\n");
 	fflush(stdout);
 	scanf("%d", &num_hosts);
 
@@ -181,14 +113,14 @@ void gen_neighbor_list(char *fileName)
  * @param fileName is the file from which a list is generated
  */
 struct node* read_neighbor_list(char* fileName)
-{
+		{
 	int i,j; /**<temporary variables for condition testing purposes*/
 
 	struct node *ptr_elementInList1, *ptr_elementInList2, *new_host, ptr_list; /**<These variables are used to store
 	the read struct data from the file*/
 
 	if((ptr_file=fopen(fileName, "r")) == NULL) {
-		printf("Cannot open file.\n");
+		PRINT_DEBUG("Cannot open file.\n");
 		exit(0);
 	}
 
@@ -221,7 +153,7 @@ struct node* read_neighbor_list(char* fileName)
 
 	fclose(ptr_file);    // closes the file
 	return ptr_elementInList1;
-}
+		}
 
 /**
  * @brief this function reads from a binary file a list of nodes (neighbors) used in testing
@@ -238,96 +170,164 @@ void init_recordsARP(char *fileName){
 
 }
 
-/**@brief this function tests a set of functions which are used when
- * (1) a host sends an ARP request, (2) the request is converted to and from a FINS frame
- * (3) a cache is updated one time based on the request
- * @param fileName is the file from which the list of neighbors is drawn
+
+/**@brief this function mimics ARP request from some neighbor within a network
+ * @param IP_sender_addrs is the IP address of the neighbor which has sent a 'request'
+ * @param MAC_sender_addrs is the MAC address of the neighbor
+ * @param request_ARP_ptr is the pointer to the ARP message struct
  */
-void sender_test(char *fileName)
+void mimic_net_request(uint32_t IP_sender_addrs, uint64_t MAC_sender_addrs,
+		struct ARP_message *request_ARP_ptr)
 {
-	extern struct node *ptr_cacheHeader;
+	extern uint32_t interface_IP_addrs;
 
-	struct finsFrame request_fins, reply_fins;
-	struct ARP_message request_ARP, reply_ARP;
+	request_ARP_ptr->hardware_type = HWDTYPE;
+	request_ARP_ptr->protocol_type = PROTOCOLTYPE;
+	request_ARP_ptr->hardware_addrs_length= HDWADDRSLEN ;
+	request_ARP_ptr->protocol_addrs_length = PROTOCOLADDRSLEN;
+	request_ARP_ptr->operation = ARPREQUESTOP;
+	request_ARP_ptr->sender_MAC_addrs = MAC_sender_addrs;
+	request_ARP_ptr->sender_IP_addrs = IP_sender_addrs;
+	request_ARP_ptr->target_MAC_addrs = 0;
+	request_ARP_ptr->target_IP_addrs = interface_IP_addrs;
+
+}
+
+/**Based on which host matches the ARP request an appropriate reply through a FINS frame is
+ * created
+ * @brief this function mimics a network response for an ARP request pushed via a FINS frame.
+ * The purpose is to test the functionality of the code for the ARP module
+ * @param request_ARP_ptr is the pointer to the ARP message struct request received by the 'nodes'
+ * @param reply_ARP_ptr is the pointer to the ARP message struct reply given the appropriate node
+ */
+void mimic_net_reply(struct ARP_message *request_ARP_ptr, struct ARP_message *reply_ARP_ptr)
+{
 	struct node *ptr_elementInList;
+	struct ARP_message reply_ARP;
 
-	uint32_t IP_addrs_read = 1;
+	ptr_elementInList = ptr_neighbor_list;
 
-	printf("\nTest of sending ARP messages\n");
-	fflush(stdout);
-
-	ptr_cacheHeader = init_intface();
-	print_cache();
-
-	gen_neighbor_list(fileName);
-	init_recordsARP(fileName);
-	print_cache();
-	print_neighbors(ptr_neighbor_list);
-
-	printf("\nChoose Sending Node Test (ARP module sends request to network for reply)\n'0' to exit\n");
-
-	while (IP_addrs_read!=0)
+	while (ptr_elementInList!=NULL )
 	{
-		IP_addrs_read = read_IP_addrs();
+		if (ptr_elementInList->IP_addrs==request_ARP_ptr->target_IP_addrs)
+		{
+			reply_ARP.sender_IP_addrs = ptr_elementInList->IP_addrs;
+			reply_ARP.sender_MAC_addrs = ptr_elementInList->MAC_addrs;
+			reply_ARP.target_IP_addrs =request_ARP_ptr->sender_IP_addrs;
+			reply_ARP.target_MAC_addrs = request_ARP_ptr->sender_MAC_addrs;
+			reply_ARP.hardware_addrs_length = request_ARP_ptr->hardware_addrs_length;
+			reply_ARP.hardware_type = request_ARP_ptr->hardware_type;
+			reply_ARP.operation = ARPREPLYOP;
+			reply_ARP.protocol_addrs_length=request_ARP_ptr->protocol_addrs_length;
+			reply_ARP.protocol_type=request_ARP_ptr->protocol_type;
 
-		request_ARP = gen_requestARP(IP_addrs_read);
+			memcpy(reply_ARP_ptr, &reply_ARP, sizeof(struct ARP_message));
 
-		request_fins = arp_to_fins(&request_ARP);
-
-		reply_fins = mimic_net_reply(request_fins);
-
-		reply_ARP = fins_to_arp(reply_fins);
-
-		update_cache(reply_ARP);
-
-		print_cache(ptr_cacheHeader);
+		}
+		ptr_elementInList = ptr_elementInList->next;
 	}
 
-
-	term_intface();
 }
+
 
 /**@brief this function tests a set of functions which are used when
  * (1) a host receives an ARP request, and (2) keeps updating its cache based on
  * these ARP requests
  * @param fileName is the file from which the list of neighbors is drawn
  */
-void receiver_test(char *fileName)
+void send_receive_update(char *fileName)
 {
-	struct ARP_message reply_ARP;
-
 	extern struct node *ptr_cacheHeader;
-	struct node *ptr_elementInList;
+	struct finsFrame request_fins, reply_fins, *request_fins_ptr, *reply_fins_ptr;
+	struct ARP_message request_ARP1, request_ARP2, reply_ARP1, reply_ARP2;
+	struct ARP_message *request_ARP_ptr1, *request_ARP_ptr2, *reply_ARP_ptr1, *reply_ARP_ptr2;
+	struct arp_hdr hdr_ARP, *hdr_ARP_ptr;
+	uint64_t MAC_addrs;
+	uint32_t IP_addrs_read;
+	int task;
 
-	uint32_t IP_sender_addrs = 1;
-	uint64_t MAC_sender_addrs;
-
-
-	printf("\nTest of receiving ARP messages\n");
-	fflush(stdout);
-
+	/**Following code generates a list of IP/MAC addresses of 'neighbors' and initializes cache*/
+	ptr_cacheHeader = init_intface();
 	gen_neighbor_list(fileName);
 	init_recordsARP(fileName);
+	print_cache();
 	print_neighbors(ptr_neighbor_list);
+	hdr_ARP_ptr = &hdr_ARP;
+	IP_addrs_read = 1;
+	task = 1;
 
-	ptr_cacheHeader = init_intface();
+	/**Begin Initialize/Instantiate Pointers */
+	request_fins_ptr = &request_fins;
+	reply_fins_ptr = &reply_fins;
+	request_ARP_ptr1 = &request_ARP1;
+	request_ARP_ptr2 = &request_ARP2;
+	reply_ARP_ptr1 = &reply_ARP1;
+	reply_ARP_ptr2 = &reply_ARP2;
 
-	printf("\nFrom the above neighbor list choose which node (IP) should generate an ARP message?\n'0' to exit\n");
-	fflush(stdout);
-
-	while (IP_sender_addrs!=NULLADDRESS)
+	/**A host can send update its cache based on its own request or a request from another network host*/
+	while (IP_addrs_read!=0 && (task==0 || task == 1))
 	{
-		IP_sender_addrs = read_IP_addrs();
+		PRINT_DEBUG("\nTest send request and update `0' or test receive a request `1' \n");
+		scanf("%d", &task);
+		IP_addrs_read = read_IP_addrs();
 
-		MAC_sender_addrs = search_MAC_addrs(IP_sender_addrs, ptr_neighbor_list);
-		reply_ARP = mimic_net_request(IP_sender_addrs, MAC_sender_addrs);
-		print_msgARP(reply_ARP);
-		update_cache(reply_ARP);
-		print_cache();
+		/**The following functions test the internal operations of the module*/
+		if (task==0){
+
+			gen_requestARP(IP_addrs_read, request_ARP_ptr1);
+			print_msgARP(request_ARP_ptr1);
+			arp_to_fins(request_ARP_ptr1, request_fins_ptr);
+			fins_to_arp(request_fins_ptr, request_ARP_ptr2);
+			mimic_net_reply(request_ARP_ptr2, reply_ARP_ptr1);
+
+			if (check_valid_arp(reply_ARP_ptr1)==1){
+			arp_to_fins(reply_ARP_ptr1, reply_fins_ptr);
+			fins_to_arp(reply_fins_ptr, reply_ARP_ptr2);
+			print_msgARP(reply_ARP_ptr2);
+			update_cache(reply_ARP_ptr2);}
+
+			print_cache();
+		}
+		else if (task==1){
+
+			MAC_addrs = search_MAC_addrs(IP_addrs_read, ptr_neighbor_list);
+			mimic_net_request(IP_addrs_read, MAC_addrs,request_ARP_ptr1);
+			print_msgARP(request_ARP_ptr1);
+
+			if (check_valid_arp(request_ARP_ptr1)==1){
+			arp_to_fins(request_ARP_ptr1, request_fins_ptr);
+			fins_to_arp(request_fins_ptr, request_ARP_ptr2);
+			print_msgARP(request_ARP_ptr2);
+			update_cache(request_ARP_ptr2);}
+
+			print_cache();
+		}
+
+		/**The following functions test the external operation of the module*/
+
+		if (check_valid_arp(request_ARP_ptr2)==1){
+		hdr_ARP_ptr = &hdr_ARP;
+		/**convert ARP message to htons format and generate MAC addresses as unsigned char ptr*/
+		net_fmt_conversion(request_ARP_ptr2, hdr_ARP_ptr);
+		print_arp_hdr(hdr_ARP_ptr);/**print some fields of the ARP message in external format*/
+		host_fmt_conversion(hdr_ARP_ptr, request_ARP_ptr2);/**convert ARP message to ntohs format*/
+		print_msgARP(request_ARP_ptr2);/**print ARP message internal format*/
+		}
+
 	}
 
 	term_intface();
-
 }
 
 
+int main(int argc, char *argv[])
+{
+	IP_interface_set[0] = IPADDRESS;
+	MAC_interface_set[0] = MACADDRESS;
+	interface_MAC_addrs = MACADDRESS;
+	interface_IP_addrs = IPADDRESS;
+
+	send_receive_update(argv[1]); //ARP request/reply is received and cache is updated
+
+	return 0;
+}
