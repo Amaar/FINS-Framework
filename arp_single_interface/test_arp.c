@@ -113,7 +113,7 @@ void gen_neighbor_list(char *fileName)
  * @param fileName is the file from which a list is generated
  */
 struct node* read_neighbor_list(char* fileName)
-		{
+				{
 	int i,j; /**<temporary variables for condition testing purposes*/
 
 	struct node *ptr_elementInList1, *ptr_elementInList2, *new_host, ptr_list; /**<These variables are used to store
@@ -153,7 +153,7 @@ struct node* read_neighbor_list(char* fileName)
 
 	fclose(ptr_file);    // closes the file
 	return ptr_elementInList1;
-		}
+				}
 
 /**
  * @brief this function reads from a binary file a list of nodes (neighbors) used in testing
@@ -241,10 +241,15 @@ void send_receive_update(char *fileName)
 	struct finsFrame request_fins, reply_fins, *request_fins_ptr, *reply_fins_ptr;
 	struct ARP_message request_ARP1, request_ARP2, reply_ARP1, reply_ARP2;
 	struct ARP_message *request_ARP_ptr1, *request_ARP_ptr2, *reply_ARP_ptr1, *reply_ARP_ptr2;
-	struct arp_hdr hdr_ARP, *hdr_ARP_ptr;
+	struct arp_hdr hdr_ARP1, hdr_ARP2, *hdr_ARP_ptr1, *hdr_ARP_ptr2;
 	uint64_t MAC_addrs;
 	uint32_t IP_addrs_read;
 	int task;
+
+	uint64_t testInt = 304553;
+	unsigned char tC[6];
+
+	MAC_addrs_conversion(testInt, tC);
 
 	/**Following code generates a list of IP/MAC addresses of 'neighbors' and initializes cache*/
 	ptr_cacheHeader = init_intface();
@@ -252,7 +257,8 @@ void send_receive_update(char *fileName)
 	init_recordsARP(fileName);
 	print_cache();
 	print_neighbors(ptr_neighbor_list);
-	hdr_ARP_ptr = &hdr_ARP;
+	hdr_ARP_ptr1 = &hdr_ARP1;
+	hdr_ARP_ptr2 = &hdr_ARP2;
 	IP_addrs_read = 1;
 	task = 1;
 
@@ -267,51 +273,52 @@ void send_receive_update(char *fileName)
 	/**A host can send update its cache based on its own request or a request from another network host*/
 	while (IP_addrs_read!=0 && (task==0 || task == 1))
 	{
-		PRINT_DEBUG("\nTest send request and update `0' or test receive a request `1' \n");
+		PRINT_DEBUG("\nTest receive a request `0' or test send request and update `1' \n");
 		scanf("%d", &task);
 		IP_addrs_read = read_IP_addrs();
 
 		/**The following functions test the internal operations of the module*/
 		if (task==0){
 
-			gen_requestARP(IP_addrs_read, request_ARP_ptr1);
-			print_msgARP(request_ARP_ptr1);
-			arp_to_fins(request_ARP_ptr1, request_fins_ptr);
-			fins_to_arp(request_fins_ptr, request_ARP_ptr2);
-			mimic_net_reply(request_ARP_ptr2, reply_ARP_ptr1);
-
-			if (check_valid_arp(reply_ARP_ptr1)==1){
-			arp_to_fins(reply_ARP_ptr1, reply_fins_ptr);
-			fins_to_arp(reply_fins_ptr, reply_ARP_ptr2);
-			print_msgARP(reply_ARP_ptr2);
-			update_cache(reply_ARP_ptr2);}
-
-			print_cache();
-		}
-		else if (task==1){
-
 			MAC_addrs = search_MAC_addrs(IP_addrs_read, ptr_neighbor_list);
 			mimic_net_request(IP_addrs_read, MAC_addrs,request_ARP_ptr1);
 			print_msgARP(request_ARP_ptr1);
 
 			if (check_valid_arp(request_ARP_ptr1)==1){
-			arp_to_fins(request_ARP_ptr1, request_fins_ptr);
-			fins_to_arp(request_fins_ptr, request_ARP_ptr2);
-			print_msgARP(request_ARP_ptr2);
-			update_cache(request_ARP_ptr2);}
+				arp_msg_to_hdr(request_ARP_ptr1, hdr_ARP_ptr1);
+				print_arp_hdr(hdr_ARP_ptr1);
+				arp_to_fins(hdr_ARP_ptr1, request_fins_ptr);
+				fins_to_arp(request_fins_ptr, hdr_ARP_ptr2);
+				arp_hdr_to_msg(hdr_ARP_ptr2, request_ARP_ptr2);
+				print_arp_hdr(hdr_ARP_ptr2);
+				print_msgARP(request_ARP_ptr2);
+				update_cache(request_ARP_ptr2);}
 
 			print_cache();
+
 		}
+		else if (task==1){
+			gen_requestARP(IP_addrs_read, request_ARP_ptr1);
+			print_msgARP(request_ARP_ptr1);
+			arp_msg_to_hdr(request_ARP_ptr1, hdr_ARP_ptr1);
+			print_arp_hdr(hdr_ARP_ptr1);
+			arp_to_fins(hdr_ARP_ptr1, request_fins_ptr);
+			fins_to_arp(request_fins_ptr, hdr_ARP_ptr2);
+			arp_hdr_to_msg(hdr_ARP_ptr2, request_ARP_ptr2);
+			print_arp_hdr(hdr_ARP_ptr2);
 
-		/**The following functions test the external operation of the module*/
+			mimic_net_reply(request_ARP_ptr2, reply_ARP_ptr1);
 
-		if (check_valid_arp(request_ARP_ptr2)==1){
-		hdr_ARP_ptr = &hdr_ARP;
-		/**convert ARP message to htons format and generate MAC addresses as unsigned char ptr*/
-		net_fmt_conversion(request_ARP_ptr2, hdr_ARP_ptr);
-		print_arp_hdr(hdr_ARP_ptr);/**print some fields of the ARP message in external format*/
-		host_fmt_conversion(hdr_ARP_ptr, request_ARP_ptr2);/**convert ARP message to ntohs format*/
-		print_msgARP(request_ARP_ptr2);/**print ARP message internal format*/
+			if (check_valid_arp(reply_ARP_ptr1)==1){
+				arp_msg_to_hdr(reply_ARP_ptr1, hdr_ARP_ptr1);
+				arp_to_fins(hdr_ARP_ptr1, reply_fins_ptr);
+				fins_to_arp(reply_fins_ptr, hdr_ARP_ptr2);
+				arp_hdr_to_msg(hdr_ARP_ptr2, reply_ARP_ptr2);
+				print_msgARP(reply_ARP_ptr2);
+				update_cache(reply_ARP_ptr2);}
+
+			print_cache();
+
 		}
 
 	}

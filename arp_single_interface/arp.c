@@ -38,7 +38,7 @@ uint32_t gen_IP_addrs(uint8_t a, uint8_t b, uint8_t c, uint8_t d)
  * @param e an octetvoid init_recordsARP(char *fileName);*/
 
 uint64_t gen_MAC_addrs(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint8_t e, uint8_t f)
-{return (109951162800ull*(a)+ 4294967296ull*(b) + 16777216ull*(c) + 65536ull*(d) + (256ull*(e)) + (f));
+{return (1099511627776ull*(a)+ 4294967296ull*(b) + 16777216ull*(c) + 65536ull*(d) + (256ull*(e)) + (f));
 }
 
 /**
@@ -71,8 +71,6 @@ void print_MAC_addrs(uint64_t MAC_addrs)
  */
 void gen_requestARP(uint32_t IP_address_target, struct ARP_message *request_ARP_ptr)
 {
-	//	struct ARP_message request_ARP;
-
 	extern uint64_t interface_MAC_addrs;
 	extern uint32_t interface_IP_addrs;
 
@@ -223,23 +221,27 @@ void print_msgARP(struct ARP_message *pckt){
 void print_arp_hdr(struct arp_hdr *pckt){
 
 	int i;
-	unsigned char sender[6], target[6];
 
-	PRINT_DEBUG("Printing of an external format arp message the\n");
-
-	addrs_conversion(pckt->arp.sender_MAC_addrs, &sender[0]);
-	addrs_conversion(pckt->arp.target_MAC_addrs, &target[0]);
-
-	PRINT_DEBUG("Sender hardware (MAC) address = ");
+	PRINT_DEBUG("\n\nPrinting of an external format arp message");
+	PRINT_DEBUG("\nSender hardware (MAC) address = ");
 	for (i=HDWADDRSLEN-1;i>-1;i--)
-		PRINT_DEBUG("%x", sender[i]);
+		PRINT_DEBUG("%x:", pckt->sender_MAC_addrs[i]);
+	PRINT_DEBUG("\nSender IP address = ");
+		for (i=3;i>-1;i--)
+			PRINT_DEBUG("%d.", pckt->sender_IP_addrs[i]);
 
 	PRINT_DEBUG("\nTarget hardware (MAC) address= ");
 	for (i=HDWADDRSLEN-1;i>-1;i--)
-		PRINT_DEBUG("%x", target[i]);
+		PRINT_DEBUG("%x", pckt->target_MAC_addrs[i]);
+	PRINT_DEBUG("\nTarget IP address = ");
+		for (i=3;i>-1;i--)
+			PRINT_DEBUG("%d.", pckt->target_IP_addrs[i]);
 
-	PRINT_DEBUG("\nHardware type: %d", pckt->arp.hardware_type);
-	PRINT_DEBUG("\nProtocol type: %d\n", pckt->arp.protocol_type);
+	PRINT_DEBUG("\nHardware type: %d", pckt->hardware_type);
+	PRINT_DEBUG("\nProtocol type: %d", pckt->protocol_type);
+	PRINT_DEBUG("\nHardware length: %d", pckt->hardware_addrs_length);
+	PRINT_DEBUG("\nHardware length: %d", pckt->protocol_addrs_length);
+	PRINT_DEBUG("\nOperation: %d\n\n", pckt->operation);
 }
 
 /**
@@ -312,21 +314,21 @@ uint64_t search_MAC_addrs(uint32_t IP_addrs, struct node *ptr_list_neighbors)
  * @param reply_ARP is a pointer to an ARP message struct which is type cast as a PDU
  * of a data FINS frame
  */
-void arp_to_fins(struct ARP_message *pckt_arp, struct finsFrame *pckt_fins)
+void arp_to_fins(struct arp_hdr *pckt_arp, struct finsFrame *pckt_fins)
 {
 	pckt_fins->dataOrCtrl = DATA;
 	pckt_fins->dataFrame.pdu = (unsigned char *)(pckt_arp);
 
-	if (pckt_arp->operation == ARPREQUESTOP) //request
+	if (pckt_arp->operation == htons(ARPREQUESTOP)) /**endien format demands htons*/
 	{
-		pckt_fins->destinationID.id = (unsigned char) ETHERSTUBID; //to be sent to the ethernet
+		pckt_fins->destinationID.id = (unsigned char) ETHERSTUBID; /**to be sent to the ethernet*/
 		pckt_fins->dataFrame.directionFlag= DOWN;
 		pckt_fins->dataFrame.pduLength = sizeof(struct ARP_message);
 	}
 
-	else if (pckt_arp->operation == ARPREPLYOP) //reply
+	else if (pckt_arp->operation == htons(ARPREPLYOP)) /**endien format demands htons*/
 	{
-		pckt_fins->destinationID.id = (unsigned char) ARPID; //to be sent to the ethernet
+		pckt_fins->destinationID.id = (unsigned char) ARPID; /**to be sent to the ethernet*/
 		pckt_fins->dataFrame.directionFlag= UP;
 		pckt_fins->dataFrame.pduLength = sizeof(struct ARP_message);
 	}
@@ -341,7 +343,7 @@ void arp_to_fins(struct ARP_message *pckt_arp, struct finsFrame *pckt_fins)
  * @param pckt_fins is a FINS data frame whose pdu contains the address of an ARP message struct
  * @param reply_ARP is an 'empty' ARP message which will be be filled by the contents pointed to by the FINS frame's pdu
  */
-void fins_to_arp(struct finsFrame *pckt_fins, struct ARP_message *pckt_arp){
+void fins_to_arp(struct finsFrame *pckt_fins, struct arp_hdr *pckt_arp){
 
 	memcpy(pckt_arp,  pckt_fins->dataFrame.pdu, pckt_fins->dataFrame.pduLength );
 }
@@ -373,7 +375,6 @@ struct node* init_intface()
 		intface->MAC_addrs = MAC_interface_set[i];
 		intface->co_intface=NULL;
 		intface->next = NULL;
-
 
 		if (i==0){
 			ptr_elementInList1 = intface;
@@ -422,63 +423,69 @@ void term_intface()
 /**
  * @brief converts 6-byte MAC address (stored as unsigned 64-bit int)
  * into a representable 6-byte char array
- * @param MAC_int_addrs is the address in unsigned int 64 bits
- * @param *MAC_char_addrs points to the character array which will store the converted address
+ * @param int_addrs is the address in unsigned int 64
+ * @param *char_addrs points to the character array which will store the converted address
  *  */
-
-void addrs_conversion(uint64_t MAC_int_addrs, unsigned char *MAC_char_addrs){
+void MAC_addrs_conversion(uint64_t int_addrs, unsigned char *char_addrs){
 
 	int i;
-
 	/**register shifting is used to extract individual bytes in the code below*/
 
 	for (i=0;i<6;i++)
 	{
 		if (i==0)
-			MAC_char_addrs[i] = (unsigned char) ((MAC_int_addrs & (0x00000000000000FF)));
+			char_addrs[i] = (unsigned char) ((int_addrs & (0x00000000000000FF)));
 		else if (i==1)
-			MAC_char_addrs[i] = (unsigned char) ((MAC_int_addrs & (0x000000000000FF00))>>8);
+			char_addrs[i] = (unsigned char) ((int_addrs & (0x000000000000FF00))>>8);
 		else if (i==2)
-			MAC_char_addrs[i] =  (unsigned char) ((MAC_int_addrs & (0x0000000000FF0000))>>16);
+			char_addrs[i] =  (unsigned char) ((int_addrs & (0x0000000000FF0000))>>16);
 		else if (i==3)
-			MAC_char_addrs[i] = (unsigned char) ((MAC_int_addrs & (0x00000000FF000000))>>24);
+			char_addrs[i] = (unsigned char) ((int_addrs & (0x00000000FF000000))>>24);
 		else if (i==4)
-			MAC_char_addrs[i] = (unsigned char) ((MAC_int_addrs & (0x00000000FF00000000))>>32);
+			char_addrs[i] = (unsigned char) ((int_addrs & (0x00000000FF00000000))>>32);
 		else if (i==5)
-			MAC_char_addrs[i] = (unsigned char) ((MAC_int_addrs & (0x00FF0000000000))>>40);
-	}
+			char_addrs[i] = (unsigned char) ((int_addrs & (0x00FF0000000000))>>40);
 
+	}
+}
+
+/**
+ * @brief converts 4-byte IP address (stored as unsigned 32-bit int)
+ * into a representable 4-byte char array
+ * @param int_addrs is the address in unsigned int 32
+ * @param *char_addrs points to the character array which will store the converted address
+ *  */
+void IP_addrs_conversion(uint32_t int_addrs, unsigned char *char_addrs){
+
+	int i;
+	/**register shifting is used to extract individual bytes in the code below*/
+
+	for (i=0;i<4;i++)
+	{
+		if (i==0)
+			char_addrs[i] = (unsigned char) ((int_addrs & (0x000000FF)));
+		else if (i==1)
+			char_addrs[i] = (unsigned char) ((int_addrs & (0x0000FF00))>>8);
+		else if (i==2)
+			char_addrs[i] =  (unsigned char) ((int_addrs & (0x00FF0000))>>16);
+		else if (i==3)
+			char_addrs[i] = (unsigned char) ((int_addrs & (0xFF000000))>>24);
+	}
 }
 
 
 /**
  * @brief converts an internal ARP message into a representable ARP message which
- * the OS can use
- * @param pckt points to the internal ARP message
+ * the OS can use by accounting for the Big endien format
  * @param pckt_hdr points to the ARP message which can be sent outside the module
  */
-void net_fmt_conversion(struct ARP_message *pckt, struct arp_hdr *pckt_hdr){
+void host_to_net(struct arp_hdr *pckt_hdr){
 
-	memcpy(&(pckt_hdr->arp), pckt, sizeof(struct ARP_message));
-	pckt_hdr->arp.protocol_type = htons(pckt_hdr->arp.protocol_type);/**little endien to big endien*/
-	pckt_hdr->arp.hardware_type = htons(pckt_hdr->arp.hardware_type);
-	addrs_conversion(pckt->target_MAC_addrs, pckt_hdr->tgt_hwd_addrs);
-	addrs_conversion(pckt->sender_MAC_addrs, pckt_hdr->src_hwd_addrs);
+	pckt_hdr->protocol_type = htons(pckt_hdr->protocol_type);//little endien to big endien
+	pckt_hdr->hardware_type = htons(pckt_hdr->hardware_type);
+	pckt_hdr->operation = htons(pckt_hdr->operation);
 }
 
-
-/**
- * @brief converts an external ARP message into a representable ARP message which
- * the ARP module can use
- * @param pckt_hdr points to the ARP message which can be sent outside the module
- *  * @param pckt points to the internal ARP message
- * *  *  */
-void host_fmt_conversion(struct arp_hdr *pckt_hdr, struct ARP_message *pckt){
-
-	memcpy(pckt, &(pckt_hdr->arp), sizeof(struct ARP_message));
-	pckt->protocol_type = ntohs(pckt_hdr->arp.protocol_type);/**big endien to little endien*/
-	pckt->hardware_type = ntohs(pckt_hdr->arp.hardware_type);
-}
 
 /**
  * @brief simply checks whether a received ARP message is valid or not
@@ -509,4 +516,52 @@ int check_valid_arp(struct ARP_message *pckt_arp){
 
 	else
 		return 0;
+}
+
+/**
+ * @brief converts an internal ARP message into a proper ARP header to be sent outside the module
+ * @param Ptr_msg is the pointer to the internal ARP message
+ * @param ptr_hdr is the pointer to the ARP header which will be communicated outside
+ *   */
+
+void arp_msg_to_hdr(struct ARP_message *ptr_msg, struct arp_hdr *ptr_hdr){
+
+	ptr_hdr->hardware_type = ptr_msg->hardware_type;
+	ptr_hdr->protocol_type = ptr_msg->protocol_type;;
+	ptr_hdr->hardware_addrs_length = ptr_msg->hardware_addrs_length;
+	ptr_hdr->protocol_addrs_length = ptr_msg->protocol_addrs_length;
+	ptr_hdr->operation = ptr_msg->operation;
+	MAC_addrs_conversion(ptr_msg->sender_MAC_addrs, ptr_hdr->sender_MAC_addrs);
+	IP_addrs_conversion(ptr_msg->sender_IP_addrs, ptr_hdr->sender_IP_addrs);
+	MAC_addrs_conversion(ptr_msg->target_MAC_addrs, ptr_hdr->target_MAC_addrs);
+	IP_addrs_conversion(ptr_msg->target_IP_addrs, ptr_hdr->target_IP_addrs);
+
+	host_to_net(ptr_hdr);/**Change the (endien) format of certain fields*/
+}
+
+/**
+ * @brief converts an external ARP header into an internal ARP message
+ * @param ptr_hdr is the pointer to the ARP header
+ * @param ptr_msg is the pointer to the internal ARP message
+ */
+void arp_hdr_to_msg(struct arp_hdr *ptr_hdr, struct ARP_message *ptr_msg){
+
+	unsigned char *sdr_ads, *tgt_ads, *ip_sdr, *ip_dst;
+
+	host_to_net(ptr_hdr);/**Change the endien format of certain fields*/
+
+	sdr_ads = ptr_hdr->sender_MAC_addrs;
+	tgt_ads = ptr_hdr->target_MAC_addrs;
+	ip_sdr = ptr_hdr->sender_IP_addrs;
+	ip_dst = ptr_hdr->target_IP_addrs;
+
+	ptr_msg->hardware_type = ptr_hdr->hardware_type;
+	ptr_msg->protocol_type = ptr_hdr->protocol_type;;
+	ptr_msg->hardware_addrs_length = ptr_hdr->hardware_addrs_length;
+	ptr_msg->protocol_addrs_length = ptr_hdr->protocol_addrs_length;
+	ptr_msg->operation = ptr_hdr->operation;
+	ptr_msg->sender_MAC_addrs = gen_MAC_addrs(sdr_ads[5], sdr_ads[4], sdr_ads[3], sdr_ads[2], sdr_ads[1], sdr_ads[0]);
+	ptr_msg->sender_IP_addrs = gen_IP_addrs((ip_sdr[3]), (ip_sdr[2]), (ip_sdr[1]), (ip_sdr[0]));
+	ptr_msg->target_MAC_addrs = gen_MAC_addrs(tgt_ads[5], tgt_ads[4], tgt_ads[3], tgt_ads[2], tgt_ads[1], tgt_ads[0]);
+	ptr_msg->target_IP_addrs = gen_IP_addrs(ip_dst[3], ip_dst[2], ip_dst[1], ip_dst[0]);
 }

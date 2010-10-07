@@ -20,26 +20,33 @@
  * fields. This struct has to be converted into an 'external' format once pushed outside the ARP module*/
 struct ARP_message
 {
+	uint16_t hardware_type;
+	uint16_t protocol_type;
+	uint8_t hardware_addrs_length;
+	uint8_t protocol_addrs_length;
+	uint16_t operation;
 	uint64_t sender_MAC_addrs;
 	uint32_t sender_IP_addrs;
 	uint64_t target_MAC_addrs;
 	uint32_t target_IP_addrs;
-	uint16_t hardware_type;
-	uint16_t protocol_type;
-	uint16_t operation;
-	uint8_t hardware_addrs_length;
-	uint8_t protocol_addrs_length;
 };
 
-/**struct arp_hdr is used for use external to the module. It contains the regular
- * ARP message in addition to the hardware addresses of the sender/target as char pointers*/
+/**struct arp_hdr is used for use external to the ARP module. */
 struct arp_hdr
 {
-	struct ARP_message arp;
-	unsigned char src_hwd_addrs[HDWADDRSLEN];
-	unsigned char tgt_hwd_addrs[HDWADDRSLEN];
+	uint16_t hardware_type;
+	uint16_t protocol_type;
+	unsigned char hardware_addrs_length;
+	unsigned char protocol_addrs_length;
+	uint16_t operation;
+	unsigned char sender_MAC_addrs[HDWADDRSLEN];
+	unsigned char sender_IP_addrs[PROTOCOLADDRSLEN];
+	unsigned char target_MAC_addrs[HDWADDRSLEN];
+	unsigned char target_IP_addrs[PROTOCOLADDRSLEN];
+
 };
 
+/**This struct is used to store information about neighboring hosts for the interface*/
 struct node{
 
 	uint64_t MAC_addrs;
@@ -74,20 +81,24 @@ void print_cache();
 
 uint64_t search_MAC_addrs(uint32_t IP_addrs, struct node *ptr);
 
-void arp_to_fins(struct ARP_message *pckt_arp, struct finsFrame *pckt_fins);
+void arp_to_fins(struct arp_hdr *pckt_arp, struct finsFrame *pckt_fins);
 
-void fins_to_arp(struct finsFrame *pckt_fins, struct ARP_message *pckt_arp);//, int size_of_finsFrame);
+void fins_to_arp(struct finsFrame *pckt_fins, struct arp_hdr *pckt_arp);//, int size_of_finsFrame);
 
 struct node* init_intface();
 
 void term_intface();
 
-void addrs_conversion(uint64_t MAC_int_addrs, unsigned char *MAC_addrs);
+void MAC_addrs_conversion(uint64_t MAC_int_addrs, unsigned char *MAC_addrs);
 
-void net_fmt_conversion(struct ARP_message *pckt, struct arp_hdr *pckt_hdr);
+void IP_addrs_conversion(uint32_t IP_int_addrs, unsigned char *IP_char_addrs);
 
-void host_fmt_conversion(struct arp_hdr *pckt_hdr, struct ARP_message *pckt);
+void net_fmt_conversion(struct arp_hdr *pckt_hdr);
 
 int check_valid_arp(struct ARP_message *pckt_arp);
 
 void print_arp_hdr(struct arp_hdr *pckt);
+
+void arp_msg_to_hdr(struct ARP_message *ptr_msg, struct arp_hdr *ptr_hdr);
+
+void arp_hdr_to_msg(struct arp_hdr *ptr_hdr, struct ARP_message *ptr_msg);
