@@ -16,7 +16,6 @@
 
 
 
-
 #ifndef FINSTYPES_H_
 #define FINSTYPES_H_
 
@@ -91,9 +90,6 @@ void *paramterValue;
 struct tableRecord *replyRecord;
 
 };
-
-
-
 
 
 struct finsFrame

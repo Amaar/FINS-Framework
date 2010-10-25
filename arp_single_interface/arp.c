@@ -7,6 +7,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include<inttypes.h>
 #include "finstypes.h"
 #include "arp.h"
 #include "finsdebug.h"
@@ -14,15 +15,13 @@
 
 #define DEBUG
 
-struct node *ptr_cacheHeader; /**< points to the first element of the dynamic ARP cache*/
-
 /**
  * An address like a.b.c.d (e.g. 5.45.0.07 where a= 5, b=45, c=0,d=7) is converted an integer
  * @brief this function takes a user defined address and produces a uint32 address
- * @param a an octet
+ * @param a an octet (most significant)
  * @param b an octet
  * @param c an octet
- * @param d an octet
+ * @param d an octet (least significant)
  */
 uint32_t gen_IP_addrs(uint8_t a, uint8_t b, uint8_t c, uint8_t d)
 {	return (16777216ul*(a) + (65536ul*(b)) + (256ul*(c)) + (d));
@@ -31,15 +30,15 @@ uint32_t gen_IP_addrs(uint8_t a, uint8_t b, uint8_t c, uint8_t d)
 /**
  * An address like a:b:c:d:e:f is converted into an 64-byte unsigned integer
  * @brief this function takes a user provided MAC address as a set of octets and produces a uint64 address
- * @param a an octet
+ * @param a an octet (most significant)
  * @param b an octet
  * @param c an octet
  * @param d an octet
- * @param e an octetvoid init_recordsARP(char *fileName);*/
+ * @param e an octet
+ * @parm f an octet (least significant)*/
 
 uint64_t gen_MAC_addrs(uint8_t a, uint8_t b, uint8_t c, uint8_t d, uint8_t e, uint8_t f)
-{return (1099511627776ull*(a)+ 4294967296ull*(b) + 16777216ull*(c) + 65536ull*(d) + (256ull*(e)) + (f));
-}
+{return 1099511627776ull*(a)+ 4294967296ull*(b) + 16777216ull*(c) + 65536ull*(d) + (256ull*(e)) + (f);}
 
 /**
  * @brief this function prints IP address in a human readable format
@@ -61,9 +60,8 @@ void print_IP_addrs(uint32_t IP_addrs)
  * @brief this function prints a MAC address in a readable format
  * @param IP_addrs is the uint64 address (although a 48-byte address is used in practice
  */
-void print_MAC_addrs(uint64_t MAC_addrs)
-{PRINT_DEBUG("MAC address = %llx", MAC_addrs);
-}
+void print_MAC_addrs(uint64_t MAC_intg_addrs)
+{	PRINT_DEBUG("MAC address = %llx", MAC_intg_addrs);}
 
 /**
  * @brief this function produces an ARP request for a host whose IP address is known
@@ -71,44 +69,39 @@ void print_MAC_addrs(uint64_t MAC_addrs)
  */
 void gen_requestARP(uint32_t IP_address_target, struct ARP_message *request_ARP_ptr)
 {
-	extern uint64_t interface_MAC_addrs;
-	extern uint32_t interface_IP_addrs;
-
 	request_ARP_ptr->sender_MAC_addrs = interface_MAC_addrs;
 	request_ARP_ptr->sender_IP_addrs = interface_IP_addrs;
 	request_ARP_ptr->target_MAC_addrs = NULLADDRESS;
 	request_ARP_ptr->target_IP_addrs = IP_address_target;
-	request_ARP_ptr->hardware_type = HWDTYPE;
-	request_ARP_ptr->protocol_type = PROTOCOLTYPE;
+	request_ARP_ptr->hardware_type = (HWDTYPE);
+	request_ARP_ptr->protocol_type = (PROTOCOLTYPE);
 	request_ARP_ptr->hardware_addrs_length= HDWADDRSLEN ;
 	request_ARP_ptr->protocol_addrs_length = PROTOCOLADDRSLEN;
-	request_ARP_ptr->operation = ARPREQUESTOP;
-
+	request_ARP_ptr->operation = (ARPREQUESTOP);
 }
 
 /**
  * @brief this function produces an ARP reply for the host which has already sent
  * a request for a MAC address
- * @param request_ARP is the ARP request from the host
+ * @param request_ARP is the ARP request
+ * @param reply_ARP is the pointer to the
  */
-struct ARP_message gen_replyARP(struct ARP_message request_ARP)
+void gen_replyARP(struct ARP_message *request_ARP, struct ARP_message *reply_ARP)
 {
-	struct ARP_message reply_ARP;
+/**generate reply only if the request is intended for the host*/
+if ((request_ARP->target_IP_addrs == interface_IP_addrs)
+		&& (request_ARP->target_MAC_addrs==NULLADDRESS)){
 
-	extern uint64_t interface_MAC_addrs;
-	extern uint32_t interface_IP_addrs;
-
-	reply_ARP.sender_MAC_addrs = interface_MAC_addrs;
-	reply_ARP.sender_IP_addrs = interface_IP_addrs;
-	reply_ARP.target_MAC_addrs = request_ARP.sender_MAC_addrs;
-	reply_ARP.target_IP_addrs = request_ARP.sender_IP_addrs;
-	reply_ARP.hardware_type = HWDTYPE;
-	reply_ARP.protocol_type = PROTOCOLTYPE;
-	reply_ARP.hardware_addrs_length= HDWADDRSLEN;
-	reply_ARP.protocol_addrs_length = PROTOCOLADDRSLEN;
-	reply_ARP.operation = ARPREPLYOP;
-
-	return reply_ARP;
+	reply_ARP->sender_MAC_addrs = interface_MAC_addrs;
+	reply_ARP->sender_IP_addrs = interface_IP_addrs;
+	reply_ARP->target_MAC_addrs = request_ARP->sender_MAC_addrs;
+	reply_ARP->target_IP_addrs = request_ARP->sender_IP_addrs;
+	reply_ARP->hardware_type = (HWDTYPE);
+	reply_ARP->protocol_type = (PROTOCOLTYPE);
+	reply_ARP->hardware_addrs_length= HDWADDRSLEN;
+	reply_ARP->protocol_addrs_length = PROTOCOLADDRSLEN;
+	reply_ARP->operation = (ARPREPLYOP);
+	}
 }
 
 /**
@@ -117,7 +110,7 @@ struct ARP_message gen_replyARP(struct ARP_message request_ARP)
  * @param ptr_intface_cache is the pointer to the first element of the cache
  * @param MAC_addrs is the searched MAC address from the cache
  */
-int search_list(struct node *ptr_firstElementOfList, uint64_t MAC_addrs)
+int search_list(struct node *ptr_firstElementOfList, uint32_t IP_addrs)
 {
 	struct node *ptr_elementInList;
 	int found = 0;
@@ -127,7 +120,7 @@ int search_list(struct node *ptr_firstElementOfList, uint64_t MAC_addrs)
 	while (ptr_elementInList!=NULL)
 	{
 
-		if (ptr_elementInList->MAC_addrs == MAC_addrs )
+		if ((ptr_elementInList->IP_addrs == IP_addrs) && (ptr_elementInList->MAC_addrs!=NULLADDRESS))
 			found = 1;
 
 		ptr_elementInList = ptr_elementInList->next;
@@ -137,58 +130,45 @@ int search_list(struct node *ptr_firstElementOfList, uint64_t MAC_addrs)
 }
 
 /** * ptr_cacheHeader is the pointer to the first element of the cache
- * @brief this function updates a cache based on an ARP reply
+ * @brief this function updates a cache based on an ARP message
  * @param pckt_ARP is an ARP message (either reply or request) from some host within the neighborhood
  */
 void update_cache(struct ARP_message *pckt)
 {
 	int found = 0;
-	struct node *ptr_interfaceHeader, *ptr_elementInList;/**these variables are used to traverse the linked list structure of cache*/
+	struct node *ptr_interfaceHeader;/**these variables are used to traverse the linked list structure of cache*/
 	struct ARP_message *pckt_ARP;
 
 	pckt_ARP = pckt;
 	/**update cache is performed only is the received arp message pointer is not null*/
 	if (check_valid_arp(pckt_ARP)==1)
 	{
-
 		/**cache header is a node which has information about the interface of
 		 * the host itself. It links via 'next' pointer to the node containing addresses of
 		 * a neighbor. Each subsequent neighbor is linked via this pointer
+		 *
 		 * */
 		ptr_interfaceHeader = ptr_cacheHeader;
 
-		while (ptr_interfaceHeader!=NULL)
-		{
-			/**point pointer to the list/cache header*/
-			ptr_elementInList = ptr_interfaceHeader;
-			/**returns 1 if found, else 0*/
-			found = search_list(ptr_elementInList, pckt_ARP->sender_MAC_addrs);
-			/**check for all of host's interfaces though not used in current version*/
-			ptr_interfaceHeader = ptr_interfaceHeader->co_intface;
-		}
-
+		/**returns 1 if found, else 0*/
+		found = search_list(ptr_interfaceHeader, pckt_ARP->sender_IP_addrs);
 		/**the received ARP message must be from a neighbor which is not currently known to host*/
 		ptr_interfaceHeader = ptr_cacheHeader;
 
-		while (ptr_interfaceHeader!=NULL && found==0)
+		if (found==0)
 		{
-			if (pckt_ARP->target_IP_addrs!=NULLADDRESS && pckt_ARP->sender_MAC_addrs!=NULLADDRESS && pckt_ARP->sender_IP_addrs!=NULLADDRESS)
-			{
-				/**If the ARP module is a valid sender and contains information about a new neighbor add it to cache
-				 * Store the new information as a new node and which will point to the current
-				 * list of neighbors. The cache header point towards this new node
-				 * Thus new node is added at the top of the list
-				 * */
-				struct node *new_host = malloc(sizeof(struct node));
-				new_host->next = NULL;
-				new_host->IP_addrs = pckt_ARP->sender_IP_addrs;
-				new_host->MAC_addrs = pckt_ARP->sender_MAC_addrs;
-				new_host->next = ptr_interfaceHeader->next;
-				ptr_interfaceHeader->next = new_host;
-			}
-			ptr_interfaceHeader = ptr_interfaceHeader->co_intface;
+			/**If the ARP module is a valid sender and contains information about a new neighbor add it to cache
+			 * Store the new information as a new node and which will point to the current
+			 * list of neighbors. The cache header point towards this new node
+			 * Thus new node is added at the top of the list
+			 * */
+			struct node *new_host = (struct node *) malloc(sizeof(struct node));
+			new_host->next = NULL;
+			new_host->IP_addrs = pckt_ARP->sender_IP_addrs;
+			new_host->MAC_addrs = pckt_ARP->sender_MAC_addrs;
+			new_host->next = ptr_interfaceHeader->next;
+			ptr_interfaceHeader->next = new_host;
 		}
-
 	}
 }
 
@@ -224,19 +204,17 @@ void print_arp_hdr(struct arp_hdr *pckt){
 
 	PRINT_DEBUG("\n\nPrinting of an external format arp message");
 	PRINT_DEBUG("\nSender hardware (MAC) address = ");
-	for (i=HDWADDRSLEN-1;i>-1;i--)
-		PRINT_DEBUG("%x:", pckt->sender_MAC_addrs[i]);
+	for (i=0;i<HDWADDRSLEN;i++)
+	PRINT_DEBUG("%x:", pckt->sender_MAC_addrs[i]);
 	PRINT_DEBUG("\nSender IP address = ");
-		for (i=3;i>-1;i--)
-			PRINT_DEBUG("%d.", pckt->sender_IP_addrs[i]);
-
+	for (i=0;i<PROTOCOLADDRSLEN;i++)
+	PRINT_DEBUG("%d.", pckt->sender_IP_addrs[i]);
 	PRINT_DEBUG("\nTarget hardware (MAC) address= ");
-	for (i=HDWADDRSLEN-1;i>-1;i--)
-		PRINT_DEBUG("%x", pckt->target_MAC_addrs[i]);
+	for (i=0;i<HDWADDRSLEN;i++)
+	PRINT_DEBUG("%x:", pckt->target_MAC_addrs[i]);
 	PRINT_DEBUG("\nTarget IP address = ");
-		for (i=3;i>-1;i--)
-			PRINT_DEBUG("%d.", pckt->target_IP_addrs[i]);
-
+	for (i=0;i<PROTOCOLADDRSLEN;i++)
+	PRINT_DEBUG("%d.", pckt->target_IP_addrs[i]);
 	PRINT_DEBUG("\nHardware type: %d", pckt->hardware_type);
 	PRINT_DEBUG("\nProtocol type: %d", pckt->protocol_type);
 	PRINT_DEBUG("\nHardware length: %d", pckt->hardware_addrs_length);
@@ -250,20 +228,14 @@ void print_arp_hdr(struct arp_hdr *pckt){
  */
 void print_cache(){
 
-	struct node *ptr_interfaceHeader, *ptr_elementInList;
+	struct node *ptr_elementInList;
 
+	PRINT_DEBUG("\nHost Interface:");
 	ptr_elementInList = ptr_cacheHeader;
-	ptr_interfaceHeader = ptr_cacheHeader;
-
-	while (ptr_interfaceHeader!=NULL){
-
-		PRINT_DEBUG("\nHost Interface IP Address:");
-		print_IP_addrs(ptr_interfaceHeader->IP_addrs);
-		ptr_elementInList = ptr_elementInList->next; //move the pointer to the stored node
-		print_neighbors(ptr_elementInList);
-		ptr_interfaceHeader = ptr_interfaceHeader->co_intface;
-		ptr_elementInList = ptr_interfaceHeader;
-	}
+	print_IP_addrs(ptr_elementInList->IP_addrs);
+	print_MAC_addrs(ptr_elementInList->MAC_addrs);
+	ptr_elementInList = ptr_elementInList->next; //move the pointer to the stored node
+	print_neighbors(ptr_elementInList);
 	PRINT_DEBUG("\n\n");
 }
 
@@ -277,7 +249,7 @@ void print_neighbors(struct node *ptr_list_neighbors){
 	struct node *ptr_elementInList;
 
 	ptr_elementInList = ptr_list_neighbors;
-	PRINT_DEBUG("\n\nList of addresses of neighbors:\n");
+	PRINT_DEBUG("\nList of addresses of neighbors:\n");
 
 	while (ptr_elementInList!=NULL){
 		print_IP_addrs(ptr_elementInList->IP_addrs);
@@ -316,26 +288,11 @@ uint64_t search_MAC_addrs(uint32_t IP_addrs, struct node *ptr_list_neighbors)
  */
 void arp_to_fins(struct arp_hdr *pckt_arp, struct finsFrame *pckt_fins)
 {
+	pckt_fins->destinationID.id = (unsigned char) ETHERSTUBID;
 	pckt_fins->dataOrCtrl = DATA;
 	pckt_fins->dataFrame.pdu = (unsigned char *)(pckt_arp);
-
-	if (pckt_arp->operation == htons(ARPREQUESTOP)) /**endien format demands htons*/
-	{
-		pckt_fins->destinationID.id = (unsigned char) ETHERSTUBID; /**to be sent to the ethernet*/
-		pckt_fins->dataFrame.directionFlag= DOWN;
-		pckt_fins->dataFrame.pduLength = sizeof(struct ARP_message);
-	}
-
-	else if (pckt_arp->operation == htons(ARPREPLYOP)) /**endien format demands htons*/
-	{
-		pckt_fins->destinationID.id = (unsigned char) ARPID; /**to be sent to the ethernet*/
-		pckt_fins->dataFrame.directionFlag= UP;
-		pckt_fins->dataFrame.pduLength = sizeof(struct ARP_message);
-	}
-	else
-	{
-		PRINT_DEBUG("\nError: Invalid message or non-existent neighbor returning NULL\n");
-	}
+	pckt_fins->dataFrame.directionFlag= DOWN;
+	pckt_fins->dataFrame.pduLength = sizeof(struct arp_hdr);
 }
 
 /**
@@ -345,80 +302,9 @@ void arp_to_fins(struct arp_hdr *pckt_arp, struct finsFrame *pckt_fins)
  */
 void fins_to_arp(struct finsFrame *pckt_fins, struct arp_hdr *pckt_arp){
 
-	memcpy(pckt_arp,  pckt_fins->dataFrame.pdu, pckt_fins->dataFrame.pduLength );
+	memcpy(pckt_arp,  pckt_fins->dataFrame.pdu, pckt_fins->dataFrame.pduLength);
 }
 
-/**
- * @brief this function initializes a cache for the host's interface.
- * @brief Note that an interface is the first element/header of
- * a linked list of neighbors' which are represented as nodes and the
- * 'co-intface' pointer is used to link multiple interfaces (not used in current version)
- * each neighbor is linked to the next neighbor via the 'next' pointer
- */
-struct node* init_intface()
-		{
-	int i;
-	struct node *ptr_elementInList1, *ptr_elementInList2; /**<temporary variables*/
-
-	extern int INTERFACECOUNT;	/**<indicates the number of interfaces of the host (e.g. 1)*/
-	extern uint32_t IP_interface_set[1];/**<stores the IP addresses of all interfaces*/
-	extern uint64_t MAC_interface_set[1];/**<stores the MAC addresses of all interfaces*/
-
-	PRINT_DEBUG("\nInitializing ARP cache\n");
-	fflush(stdout);
-
-	for (i=0;i<INTERFACECOUNT;i++){
-
-		struct node *intface = malloc(sizeof(struct node));
-
-		intface->IP_addrs = IP_interface_set[i];
-		intface->MAC_addrs = MAC_interface_set[i];
-		intface->co_intface=NULL;
-		intface->next = NULL;
-
-		if (i==0){
-			ptr_elementInList1 = intface;
-			ptr_elementInList2 = intface;
-		}
-		else{
-			ptr_elementInList2->co_intface = intface;
-			ptr_elementInList2 = intface;
-
-		}
-	}
-	return ptr_elementInList1;
-		}
-
-/**
- * @brief this function liberates all memory allocated to store and represent the cache
- * for the ARP module */
-void term_intface()
-{
-	struct node *ptr_elementInList1, *ptr_elementInList2, *ptr_elementInList3;
-
-	ptr_elementInList1 = ptr_cacheHeader;
-	ptr_elementInList2 = ptr_cacheHeader;
-	ptr_elementInList2 = ptr_cacheHeader;
-
-	PRINT_DEBUG("\nFreeing memory of ARP cache\n");
-
-	while (ptr_elementInList1!=NULL){
-
-		ptr_elementInList2 = ptr_elementInList1->next;
-		ptr_elementInList3 = ptr_elementInList2;
-
-		while (ptr_elementInList2!=NULL){
-
-			ptr_elementInList3 = ptr_elementInList2;
-			ptr_elementInList2 = ptr_elementInList2->next;
-
-			free(ptr_elementInList3);
-		}
-		ptr_elementInList2 = ptr_elementInList1->co_intface;
-		free(ptr_elementInList1);
-		ptr_elementInList1 = ptr_elementInList2;
-	}
-}
 
 /**
  * @brief converts 6-byte MAC address (stored as unsigned 64-bit int)
@@ -427,26 +313,13 @@ void term_intface()
  * @param *char_addrs points to the character array which will store the converted address
  *  */
 void MAC_addrs_conversion(uint64_t int_addrs, unsigned char *char_addrs){
-
-	int i;
 	/**register shifting is used to extract individual bytes in the code below*/
-
-	for (i=0;i<6;i++)
-	{
-		if (i==0)
-			char_addrs[i] = (unsigned char) ((int_addrs & (0x00000000000000FF)));
-		else if (i==1)
-			char_addrs[i] = (unsigned char) ((int_addrs & (0x000000000000FF00))>>8);
-		else if (i==2)
-			char_addrs[i] =  (unsigned char) ((int_addrs & (0x0000000000FF0000))>>16);
-		else if (i==3)
-			char_addrs[i] = (unsigned char) ((int_addrs & (0x00000000FF000000))>>24);
-		else if (i==4)
-			char_addrs[i] = (unsigned char) ((int_addrs & (0x00000000FF00000000))>>32);
-		else if (i==5)
-			char_addrs[i] = (unsigned char) ((int_addrs & (0x00FF0000000000))>>40);
-
-	}
+			char_addrs[5] = (unsigned char) ((int_addrs & (0x00000000000000FF)));//least sig.
+			char_addrs[4] = (unsigned char) ((int_addrs & (0x000000000000FF00))>>8);
+			char_addrs[3] =  (unsigned char) ((int_addrs & (0x0000000000FF0000))>>16);
+			char_addrs[2] = (unsigned char) ((int_addrs & (0x00000000FF000000))>>24);
+			char_addrs[1] = (unsigned char) ((int_addrs & (0x00000000FF00000000))>>32);
+			char_addrs[0] = (unsigned char) ((int_addrs & (0x00FF0000000000))>>40);//most sig.
 }
 
 /**
@@ -456,74 +329,46 @@ void MAC_addrs_conversion(uint64_t int_addrs, unsigned char *char_addrs){
  * @param *char_addrs points to the character array which will store the converted address
  *  */
 void IP_addrs_conversion(uint32_t int_addrs, unsigned char *char_addrs){
-
-	int i;
 	/**register shifting is used to extract individual bytes in the code below*/
-
-	for (i=0;i<4;i++)
-	{
-		if (i==0)
-			char_addrs[i] = (unsigned char) ((int_addrs & (0x000000FF)));
-		else if (i==1)
-			char_addrs[i] = (unsigned char) ((int_addrs & (0x0000FF00))>>8);
-		else if (i==2)
-			char_addrs[i] =  (unsigned char) ((int_addrs & (0x00FF0000))>>16);
-		else if (i==3)
-			char_addrs[i] = (unsigned char) ((int_addrs & (0xFF000000))>>24);
-	}
+			char_addrs[3] = (unsigned char) ((int_addrs & (0x000000FF)));//least significant
+			char_addrs[2] = (unsigned char) ((int_addrs & (0x0000FF00))>>8);
+			char_addrs[1] =  (unsigned char) ((int_addrs & (0x00FF0000))>>16);
+			char_addrs[0] = (unsigned char) ((int_addrs & (0xFF000000))>>24);//most significant
 }
 
 
 /**
- * @brief converts an internal ARP message into a representable ARP message which
- * the OS can use by accounting for the Big endien format
- * @param pckt_hdr points to the ARP message which can be sent outside the module
+ * @brief converts an arp header into a representable format (endien/address format)
+ * immediately receiving it after or before sending it outside the arp module
+ * @param pckt_hdr points to the arp header
  */
 void host_to_net(struct arp_hdr *pckt_hdr){
 
-	pckt_hdr->protocol_type = htons(pckt_hdr->protocol_type);//little endien to big endien
+	pckt_hdr->protocol_type = htons(pckt_hdr->protocol_type);
 	pckt_hdr->hardware_type = htons(pckt_hdr->hardware_type);
 	pckt_hdr->operation = htons(pckt_hdr->operation);
 }
-
 
 /**
  * @brief simply checks whether a received ARP message is valid or not
  * @param pckt_arp points to the ARP message
  */
-int check_valid_arp(struct ARP_message *pckt_arp){
+int check_valid_arp(struct ARP_message *pckt){
 
-	struct ARP_message *pckt;
-	pckt = pckt_arp;
-
-	if (pckt!=NULL)
-		if (pckt->hardware_type==HWDTYPE)
-			if(pckt->operation==ARPREQUESTOP || pckt->operation==ARPREPLYOP)
-				if(pckt->hardware_addrs_length==HDWADDRSLEN)
-					if(pckt->protocol_addrs_length==PROTOCOLADDRSLEN)
-						if(pckt->protocol_type==PROTOCOLTYPE)
-							return 1;
-						else
-							return 0;
-					else
-						return 0;
-				else
-					return 0;
-			else
-				return 0;
-		else
-			return 0;
-
+	if ((pckt!=NULL)&& (pckt->hardware_type==HWDTYPE)&&(pckt->operation==ARPREQUESTOP||pckt->operation==ARPREPLYOP)
+		&&(pckt->hardware_addrs_length==HDWADDRSLEN)&&(pckt->protocol_addrs_length==PROTOCOLADDRSLEN)
+		&&(pckt->protocol_type==PROTOCOLTYPE) && (pckt->sender_MAC_addrs!=NULLADDRESS)
+		&&(pckt->sender_IP_addrs!=NULLADDRESS)&&(pckt->target_IP_addrs!=NULLADDRESS))
+		return 1;
 	else
 		return 0;
 }
 
 /**
  * @brief converts an internal ARP message into a proper ARP header to be sent outside the module
- * @param Ptr_msg is the pointer to the internal ARP message
+ * @param ptr_msg is the pointer to the internal ARP message
  * @param ptr_hdr is the pointer to the ARP header which will be communicated outside
  *   */
-
 void arp_msg_to_hdr(struct ARP_message *ptr_msg, struct arp_hdr *ptr_hdr){
 
 	ptr_hdr->hardware_type = ptr_msg->hardware_type;
@@ -535,8 +380,6 @@ void arp_msg_to_hdr(struct ARP_message *ptr_msg, struct arp_hdr *ptr_hdr){
 	IP_addrs_conversion(ptr_msg->sender_IP_addrs, ptr_hdr->sender_IP_addrs);
 	MAC_addrs_conversion(ptr_msg->target_MAC_addrs, ptr_hdr->target_MAC_addrs);
 	IP_addrs_conversion(ptr_msg->target_IP_addrs, ptr_hdr->target_IP_addrs);
-
-	host_to_net(ptr_hdr);/**Change the (endien) format of certain fields*/
 }
 
 /**
@@ -548,8 +391,6 @@ void arp_hdr_to_msg(struct arp_hdr *ptr_hdr, struct ARP_message *ptr_msg){
 
 	unsigned char *sdr_ads, *tgt_ads, *ip_sdr, *ip_dst;
 
-	host_to_net(ptr_hdr);/**Change the endien format of certain fields*/
-
 	sdr_ads = ptr_hdr->sender_MAC_addrs;
 	tgt_ads = ptr_hdr->target_MAC_addrs;
 	ip_sdr = ptr_hdr->sender_IP_addrs;
@@ -560,8 +401,9 @@ void arp_hdr_to_msg(struct arp_hdr *ptr_hdr, struct ARP_message *ptr_msg){
 	ptr_msg->hardware_addrs_length = ptr_hdr->hardware_addrs_length;
 	ptr_msg->protocol_addrs_length = ptr_hdr->protocol_addrs_length;
 	ptr_msg->operation = ptr_hdr->operation;
-	ptr_msg->sender_MAC_addrs = gen_MAC_addrs(sdr_ads[5], sdr_ads[4], sdr_ads[3], sdr_ads[2], sdr_ads[1], sdr_ads[0]);
-	ptr_msg->sender_IP_addrs = gen_IP_addrs((ip_sdr[3]), (ip_sdr[2]), (ip_sdr[1]), (ip_sdr[0]));
-	ptr_msg->target_MAC_addrs = gen_MAC_addrs(tgt_ads[5], tgt_ads[4], tgt_ads[3], tgt_ads[2], tgt_ads[1], tgt_ads[0]);
-	ptr_msg->target_IP_addrs = gen_IP_addrs(ip_dst[3], ip_dst[2], ip_dst[1], ip_dst[0]);
+	ptr_msg->sender_MAC_addrs = gen_MAC_addrs(sdr_ads[0], sdr_ads[1], sdr_ads[2], sdr_ads[3], sdr_ads[4], sdr_ads[5]);
+	ptr_msg->sender_IP_addrs = gen_IP_addrs((ip_sdr[0]), (ip_sdr[1]), (ip_sdr[2]), (ip_sdr[3]));
+	ptr_msg->target_MAC_addrs = gen_MAC_addrs(tgt_ads[0], tgt_ads[1], tgt_ads[2], tgt_ads[3], tgt_ads[4], tgt_ads[5]);
+	ptr_msg->target_IP_addrs = gen_IP_addrs(ip_dst[0], ip_dst[1], ip_dst[2], ip_dst[3]);
 }
+
